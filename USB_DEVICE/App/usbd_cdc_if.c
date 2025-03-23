@@ -31,8 +31,8 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-uint8_t Buffer[7];
-extern char usbd_char;
+
+extern char bufferRx[64];
 extern int flag;
 //extern uint8_t buffer[20];
 /* USER CODE END PV */
@@ -186,24 +186,10 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
   switch(cmd)
   {
     case CDC_SEND_ENCAPSULATED_COMMAND:
-      // esta parte no la entiendo
-      Buffer[0] = pbuf[0];
-      Buffer[1] = pbuf[1];
-      Buffer[2] = pbuf[2];
-      Buffer[3] = pbuf[3];
-      Buffer[4] = pbuf[4];
-      Buffer[5] = pbuf[5];
-      Buffer[6] = pbuf[6];
     break;
 
     case CDC_GET_ENCAPSULATED_RESPONSE:
-      pbuf[0] = Buffer[0];
-      pbuf[1] = Buffer[1];
-      pbuf[2] = Buffer[2];
-      pbuf[3] = Buffer[3];
-      pbuf[4] = Buffer[4];
-      pbuf[5] = Buffer[5];
-      pbuf[6] = Buffer[6];
+
     break;
 
     case CDC_SET_COMM_FEATURE:
@@ -274,16 +260,15 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
   * @param  Len: Number of data received (in bytes)
   * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
   */
-
-
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
 
-
-  usbd_char = Buf[0];
+  memset (bufferRx, '\0', sizeof(bufferRx)); //limpia el bufferRx
+  memcpy (bufferRx, Buf, (uint8_t)*Len); //copia el buffer de recepcion en bufferRx
+  memset (Buf, '\0', (uint8_t)*Len); //limpia el buffer de recepcion
 
   flag = 1;
   return (USBD_OK);

@@ -39,10 +39,6 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define LED_PIN                                GPIO_PIN_13
-#define LED_GPIO_PORT                          GPIOC
-#define ON	1
-#define OFF 0
 
 /* USER CODE END PM */
 
@@ -53,15 +49,17 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
+//Comunicación
+char bufferRx[64] = {0};
+char bufferTx[64] = {0};
+
+//PWM
+int flag = 0;
+int PWM_percent=0;
+
 //ADC
 uint16_t adcIN = 0;
 
-//PWM
-char usbd_char;
-int flag = 0;
-
-//Comunicación
-char bufferTx[20] = {0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,17 +75,18 @@ static void MX_TIM4_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	  //if(htim->Instance == TIM4) HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
 	  //ADC
-	  HAL_ADC_Start(&hadc1);
+
+	HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK){
 		  	  adcIN=HAL_ADC_GetValue(&hadc1);
 
-		  	  if (adcIN >512) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ON);
-		  	  if (adcIN <512) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, OFF);
+		  	  if (adcIN >512) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+		  	  if (adcIN <512) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 	  }
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -98,8 +97,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  int PWM_percent=0;
-  //char buffer[64];
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -139,16 +137,18 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+
 	  if (flag == 1) {
-
 		  //Actualiza PWM
-		  //PWM_percent = atoi(usbd_char); //convierto cadena a entero
-		  PWM_percent = usbd_char - '0';
-		  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*100);
+		  PWM_percent = atoi(bufferRx); //convierto cadena a entero
+		  if (PWM_percent < 0) PWM_percent = 0;
+		  if (PWM_percent > 100) PWM_percent = 100;
+		  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
 
-		  //Transmisión de datos
-		  snprintf(bufferTx, sizeof(bufferTx), "PWM: %d%%", PWM_percent*10); //carga el buffer con la info de PWM_percent
-		  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+		  //Transmisión de datos a consola
+		  snprintf(bufferTx, sizeof(bufferTx), "PWM set to %d%%", PWM_percent); //carga el bufferTx con la info de PWM_percent
+		  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 
 
 
@@ -156,11 +156,6 @@ int main(void)
 
       flag = 0;
 	  }
-/*
-	  PWM_percent=0;
-	  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
-	  HAL_Delay (500);
-*/
 
   }
   /* USER CODE END 3 */
@@ -385,9 +380,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(enable_read_GPIO_Port, enable_read_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : led_Pin */
   GPIO_InitStruct.Pin = led_Pin;
@@ -395,6 +394,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(led_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : enable_read_Pin */
+  GPIO_InitStruct.Pin = enable_read_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(enable_read_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
