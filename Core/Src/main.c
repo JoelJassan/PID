@@ -29,7 +29,12 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef enum {
+	ESPERA,
+	INICIO,
+	ESCALON_1,
+	ESCALON_2,
+}state;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -49,6 +54,9 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
+//Generales
+static state modo;
+
 //Comunicación
 char bufferRx[64] = {0};
 char bufferTx[64] = {0};
@@ -76,15 +84,41 @@ static void MX_TIM4_Init(void);
 /* USER CODE BEGIN 0 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
-	  //ADC
-
-	HAL_ADC_Start(&hadc1);
+	//ADC
+  if(htim->Instance == TIM4){
+    HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK){
 		  	  adcIN=HAL_ADC_GetValue(&hadc1);
 
-		  	  if (adcIN >512) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-		  	  if (adcIN <512) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+          //lectura rapida del ADC
+		  	  //if (adcIN > 600) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+		  	  //if (adcIN < 400) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 	  }
+  }
+	
+}
+
+void SwitchMode (state estado){
+	modo = estado;
+	switch (estado){
+	case ESPERA:
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+		PWM_percent=0;
+		break;
+	case INICIO:
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+		PWM_percent=0;
+		break;
+	case ESCALON_1:
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+		PWM_percent=50;
+		break;
+	case ESCALON_2:
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+		PWM_percent=100;
+		break;
+	}
+	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
 }
 
 /* USER CODE END 0 */
@@ -130,13 +164,23 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10); //inicializo PWM en 0%
+  SwitchMode(ESPERA);
+  //__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10); //inicializo PWM en 0%
 
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	HAL_Delay(1000);
+	SwitchMode(INICIO);
+	HAL_Delay(1000);
+	SwitchMode(ESCALON_1);
+	HAL_Delay(1000);
+	SwitchMode(ESCALON_2);
+	HAL_Delay(1000);
+	SwitchMode(ESPERA);
+	while (1){}
 
 
 	  if (flag == 1) {
@@ -149,10 +193,6 @@ int main(void)
 		  //Transmisión de datos a consola
 		  snprintf(bufferTx, sizeof(bufferTx), "PWM set to %d%%", PWM_percent); //carga el bufferTx con la info de PWM_percent
 		  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
-
-
-
-      
 
       flag = 0;
 	  }
