@@ -34,7 +34,9 @@ typedef enum {
 	INICIO,
 	ESCALON_1,
 	ESCALON_2,
+  STOP,
 }state;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -64,9 +66,11 @@ char bufferTx[64] = {0};
 //PWM
 int flag = 0;
 int PWM_percent=0;
+int cont_tim4 = 0;
 
 //ADC
 uint16_t adcIN = 0;
+bool flagPrint = 1;
 
 /* USER CODE END PV */
 
@@ -85,39 +89,61 @@ static void MX_TIM4_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	//ADC
-  if(htim->Instance == TIM4){
+  if(htim->Instance == TIM4 && !flagPrint){
+    cont_tim4++;
+
     HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK){
-		  	  adcIN=HAL_ADC_GetValue(&hadc1);
 
-          //lectura rapida del ADC
-		  	  //if (adcIN > 600) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-		  	  //if (adcIN < 400) HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+      adcIN=HAL_ADC_GetValue(&hadc1);
+
+      //Transmision de datos a consola
+      snprintf(bufferTx, sizeof(bufferTx), "%d\t %d\t\t %u\r\n", cont_tim4, PWM_percent, adcIN); //carga el bufferTx
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 	  }
   }
-	
 }
 
-void SwitchMode (state estado){
+void PrintConsoleTable (){
+  snprintf(bufferTx, sizeof(bufferTx), "ADC Read (10 bits)\r\n");
+  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+  snprintf(bufferTx, sizeof(bufferTx), "Muestra\t PWM_percent\t ADC\r\n");
+  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+  flagPrint = 0;
+}
+
+void PrintConsolePWM (int PWM_percent){
+	//Transmisión de datos a consola
+	snprintf(bufferTx, sizeof(bufferTx), "### --- PWM set to %d%% ------------- ###\r\n", PWM_percent); //carga el bufferTx con la info de PWM_percent
+	CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+}
+
+
+void SetState (state estado){
 	modo = estado;
 	switch (estado){
 	case ESPERA:
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+    TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+    cont_tim4 = 0;
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 		PWM_percent=0;
 		break;
 	case INICIO:
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+    TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 		PWM_percent=0;
 		break;
 	case ESCALON_1:
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 		PWM_percent=50;
 		break;
 	case ESCALON_2:
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 		PWM_percent=100;
 		break;
+	case STOP:
+		PWM_percent=0;
+    break;
 	}
+
 	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
 }
 
@@ -164,24 +190,27 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  SwitchMode(ESPERA);
-  //__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10); //inicializo PWM en 0%
+  SetState(ESPERA);
 
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	HAL_Delay(1000);
-	SwitchMode(INICIO);
-	HAL_Delay(1000);
-	SwitchMode(ESCALON_1);
-	HAL_Delay(1000);
-	SwitchMode(ESCALON_2);
-	HAL_Delay(1000);
-	SwitchMode(ESPERA);
-	while (1){}
+  
+	  HAL_Delay(3000); //tiempo necesario para establecer la conexión micro/pc
 
+	  SetState(INICIO);
+    PrintConsoleTable ();
+	  HAL_Delay(150);
+	  SetState(ESCALON_1);
+	  HAL_Delay(500);
+	  SetState(ESCALON_2);
+	  HAL_Delay(500);
+	  SetState(STOP);
+    HAL_Delay(500);
+    SetState(ESPERA);
+	  while(1){}
 
 	  if (flag == 1) {
 		  //Actualiza PWM
@@ -189,10 +218,6 @@ int main(void)
 		  if (PWM_percent < 0) PWM_percent = 0;
 		  if (PWM_percent > 100) PWM_percent = 100;
 		  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
-
-		  //Transmisión de datos a consola
-		  snprintf(bufferTx, sizeof(bufferTx), "PWM set to %d%%", PWM_percent); //carga el bufferTx con la info de PWM_percent
-		  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 
       flag = 0;
 	  }
@@ -380,7 +405,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 16-1;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 65000-1;
+  htim4.Init.Period = 500-1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
