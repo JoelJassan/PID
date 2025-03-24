@@ -69,8 +69,8 @@ int PWM_percent=0;
 int cont_tim4 = 0;
 
 //ADC
-uint16_t adcIN = 0;
-bool flagPrint = 1;
+uint16_t adc_IN = 0;
+bool flag_print_table = 1;
 
 /* USER CODE END PV */
 
@@ -89,16 +89,16 @@ static void MX_TIM4_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	//ADC
-  if(htim->Instance == TIM4 && !flagPrint){
+  if(htim->Instance == TIM4 && !flag_print_table){
     cont_tim4++;
 
     HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK){
 
-      adcIN=HAL_ADC_GetValue(&hadc1);
+      adc_IN=HAL_ADC_GetValue(&hadc1);
 
       //Transmision de datos a consola
-      snprintf(bufferTx, sizeof(bufferTx), "%d\t %d\t\t %u\r\n", cont_tim4, PWM_percent, adcIN); //carga el bufferTx
+      snprintf(bufferTx, sizeof(bufferTx), "%d\t %d\t\t %u\r\n", cont_tim4, PWM_percent, adc_IN); //carga el bufferTx
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 	  }
   }
@@ -109,7 +109,7 @@ void PrintConsoleTable (){
   CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
   snprintf(bufferTx, sizeof(bufferTx), "Muestra\t PWM_percent\t ADC\r\n");
   CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
-  flagPrint = 0;
+  flag_print_table = 0;
 }
 
 void PrintConsolePWM (int PWM_percent){
@@ -134,7 +134,7 @@ void SetState (state estado){
 		PWM_percent=0;
 		break;
 	case ESCALON_1:
-		PWM_percent=50;
+		PWM_percent=30;
 		break;
 	case ESCALON_2:
 		PWM_percent=100;
@@ -204,11 +204,11 @@ int main(void)
     PrintConsoleTable ();
 	  HAL_Delay(150);
 	  SetState(ESCALON_1);
-	  HAL_Delay(500);
+	  HAL_Delay(700);
 	  SetState(ESCALON_2);
-	  HAL_Delay(500);
+	  HAL_Delay(700);
 	  SetState(STOP);
-    HAL_Delay(500);
+    HAL_Delay(700);
     SetState(ESPERA);
 	  while(1){}
 
@@ -347,7 +347,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 16-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 1000-1;
+  htim3.Init.Period = 500-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
