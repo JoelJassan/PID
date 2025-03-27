@@ -19,9 +19,12 @@ Estas etapas no se reflejan en el repositorio `.git`, ya que el repositorio fue 
 
 - **Comunicación USB (UART 9600 baud)**: Permite recibir datos desde una consola para ajustar el valor de PWM%. El valor recibido es un carácter entre 0 y 9, el cual ajusta el PWM entre 0% y 90%.
 
-### v0.2 (futura versión)
-- Se añadirá la capacidad de recibir más de un carácter desde la consola y reflejar este dato en el PWM%, con un rango de 0% a 100%.
+### v0.2
+- Se añade la capacidad de recibir más de un carácter desde la consola y reflejar este dato en el PWM%, con un rango de 0% a 100%.
 - Ajustar los límites de PWM para que se adapten a un rango de 0% a 100%, ya que actualmente el sistema no funciona fuera de este rango.
+
+### v0.3 (actual)
+- Se añade filtro FIR a la muestra de datos. Se pasa el código de matlab a python.
 
 
 ## Licencia
