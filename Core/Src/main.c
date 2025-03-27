@@ -46,7 +46,8 @@ typedef enum {
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define n_filtro_fir 32
+#define bits_filtro_fir (__builtin_ctz(n_filtro_fir)) 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -56,21 +57,24 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-//Generales
-static state modo;
+//PWM
+int flag = 0;
+int PWM_percent=0;
+int cont_tim4 = 0;
+int cont_ADC_register = 0;
+int cont_auxiliar = 0;
+
+//Filtro FIR
+uint16_t suma_ADC_values = 0;
+uint16_t ADC_register [n_filtro_fir] = {0}; //almacena los ultimos 32 datos del ADC
+uint16_t ADC_IN = 0;
+bool flag_print_table = 1; //ADC flag - pongo esta variable aqui porque ocupa 1 byte
 
 //Comunicación
 char bufferRx[64] = {0};
 char bufferTx[64] = {0};
 
-//PWM
-int flag = 0;
-int PWM_percent=0;
-int cont_tim4 = 0;
-
-//ADC
-uint16_t adc_IN = 0;
-bool flag_print_table = 1;
+static state modo;
 
 /* USER CODE END PV */
 
@@ -90,17 +94,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	//ADC
   if(htim->Instance == TIM4 && !flag_print_table){
-    cont_tim4++;
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //test de velocidad
 
     HAL_ADC_Start(&hadc1);
-	  if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK){
+	  if (HAL_ADC_PollForConversion(&hadc1,100) == HAL_OK){
+      ADC_IN=HAL_ADC_GetValue(&hadc1);  //obtengo el valor actual
 
-      adc_IN=HAL_ADC_GetValue(&hadc1);
+      suma_ADC_values -= ADC_register[cont_tim4 & (n_filtro_fir - 1)];
+      ADC_register[cont_tim4 & (n_filtro_fir - 1)] = ADC_IN;
+      suma_ADC_values += ADC_register[cont_tim4 & (n_filtro_fir - 1)];
+      //cont_tim4 = (cont_tim4 + 1) & (n_filtro_fir - 1); //mascara para que no se pase de n_filtro_fir
 
       //Transmision de datos a consola
-      snprintf(bufferTx, sizeof(bufferTx), "%d\t %d\t\t %u\r\n", cont_tim4, PWM_percent, adc_IN); //carga el bufferTx
+      snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, suma_ADC_values >> bits_filtro_fir);
+      //snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, ADC_IN);
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 	  }
+	  cont_tim4++;
+
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //test de velocidad
   }
 }
 
@@ -124,17 +136,17 @@ void SetState (state estado){
 	switch (estado){
 	case ESPERA:
     TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
     cont_tim4 = 0;
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 		PWM_percent=0;
 		break;
 	case INICIO:
     TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 		PWM_percent=0;
 		break;
 	case ESCALON_1:
-		PWM_percent=30;
+		PWM_percent=50;
 		break;
 	case ESCALON_2:
 		PWM_percent=100;
@@ -347,7 +359,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 16-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 500-1;
+  htim3.Init.Period = 1000-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -405,7 +417,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 16-1;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 500-1;
+  htim4.Init.Period = 1000-1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
