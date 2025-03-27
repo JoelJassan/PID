@@ -130,6 +130,7 @@ Release/
 .ipch/
 .settings/
 
+
 # Archivos específicos de CubeIDE
 *.launch
 *.sdf
@@ -163,6 +164,12 @@ Release/
 *.project
 *.mxproject
 *.mxsettings
+
+
+### Matlab ###
+
+# Funcionalidades
+Adicionales/*.sid
 
 
 # End of https://www.toptal.com/developers/gitignore/api/c,windows,linux,visualstudiocode,oxygenxmleditor
