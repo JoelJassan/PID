@@ -5,7 +5,8 @@ from scipy.signal import convolve
 # Cargar los datos
 try:
     # Si los valores están separados por espacios, usa el siguiente código:
-    datos = np.loadtxt('Muestra30-100.txt', skiprows=2)
+    #datos = np.loadtxt('Muestra50-100.txt', delimiter=',',skiprows=2)
+    datos = np.loadtxt('MuestraFIR.txt', delimiter=',',skiprows=2)
     print("Datos cargados correctamente:")
 except Exception as e:
     print(f"Error al cargar los datos: {e}")
@@ -38,7 +39,7 @@ fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 # Graficar las señales
 ax1.plot(t, V_PWM, 'b', linewidth=2)
 ax1.set_ylabel('V_PWM')
-ax2.plot(t, V_tacometro_filt, 'r', linewidth=2)
+ax2.plot(t, V_tacometro, 'r', linewidth=2)
 ax2.set_ylabel('V_tacometro')
 ax2.set_xlabel('t')
 
