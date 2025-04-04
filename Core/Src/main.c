@@ -13,6 +13,14 @@
   * in the root directory of this software component.
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
+  * Nota de Edición: 
+  * Según información leída, "se aplica una entrada escalón entre 10% y 20% del valor nominal y se registra la respuesta de salida hasta que se estabilice en el nuevo punto de operación." Esto con el fin de determinar correctamente la función transferencia.
+  * De esto se obtiene una planta con 78,59% de aproximación; superando considerablemente al valor de 65% obtenido con los valores de PWM anteriores.
+  * Se obtiene la siguiente planta:
+  * G(s) = Kp/(1+Tp1*s)
+  * Kp = 0.1026
+  * Tp1 = 0.13677  
+  * 
   ******************************************************************************
   */
 /* USER CODE END Header */
@@ -175,13 +183,10 @@ void SetState (state estado){
 		PWM_percent=0;
 		break;
 	case ESCALON_1:
-		PWM_percent=70;
+		PWM_percent=30;
 		break;
 	case ESCALON_2:
 		PWM_percent=30;
-		break;
-	case ESCALON_3:
-		PWM_percent=100;
 		break;
 	case STOP:
 		PWM_percent=0;
@@ -253,8 +258,8 @@ int main(void)
 	  SetState(ESCALON_1);
 	  HAL_Delay(1000);
 
-	  SetState(ESCALON_2);
-	  HAL_Delay(1000);
+	  //SetState(ESCALON_2);
+	  //HAL_Delay(1000);
     
 	  SetState(STOP);
     HAL_Delay(800);
