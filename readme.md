@@ -23,9 +23,15 @@ Estas etapas no se reflejan en el repositorio `.git`, ya que el repositorio fue 
 - Se añade la capacidad de recibir más de un carácter desde la consola y reflejar este dato en el PWM%, con un rango de 0% a 100%.
 - Ajustar los límites de PWM para que se adapten a un rango de 0% a 100%, ya que actualmente el sistema no funciona fuera de este rango.
 
-### v0.3 (actual)
+### v0.3
 - Se añade filtro FIR a la muestra de datos. Se pasa el código de matlab a python.
 
+### v0.4 (actual) :construction:
+- Se añade código para PID a partir de la planta obtenida en Matlab:
+  G(s) = Kp/(1+Tp1*s)
+  Kp = 0.1026
+  Tp1 = 0.13677  
+  La misma se aproxima en un 78.59% a la obtenida en el ADC.
 
 ## Licencia
 Este proyecto está bajo la licencia MIT. El código es de uso libre. Para más detalles, consulta el archivo [LICENSE](./LICENSE).
