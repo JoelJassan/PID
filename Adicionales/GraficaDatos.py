@@ -21,12 +21,13 @@ fs = 1000  # frecuencia de muestreo, en Hz
 # Variables del archivo de datos
 t = datos[:, 0]  # nro. de muestra (base de tiempo)
 PWM = datos[:, 1]  # toma datos de 2da columna (convertir a tensión)
-ADC_tacometro = datos[:, 2]  # tensión del tacómetro
+V_tacometro = datos[:, 2]  # tensión del tacómetro
+#ADC_tacometro = datos[:, 2]  # tensión del tacómetro
 
 # Acondicionamiento de señal
 t = t / fs  # Tiempo
 V_PWM = 12 * PWM / 100  # Transformo PWM a tensión de fuente
-V_tacometro = ADC_tacometro * V_tacometro_max / (2 ** nro_bits)  # Lectura del ADC, en V
+#V_tacometro = ADC_tacometro * V_tacometro_max / (2 ** nro_bits)  # Lectura del ADC, en V
 
 # Filtro FIR (media móvil)
 n_fir = 32
