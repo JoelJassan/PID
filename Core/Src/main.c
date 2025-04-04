@@ -46,8 +46,9 @@ typedef enum {
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define n_filtro_fir 32
-#define bits_filtro_fir (__builtin_ctz(n_filtro_fir)) 
+#define N_FILTRO_FIR 32
+#define BITS_FILTRO_FIR (__builtin_ctz(N_FILTRO_FIR))
+#define TAMAÑO_MEMORIA_DATOS 4000
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -57,18 +58,29 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
+
+//Acondconamento de señal
+float ADC_to_V = 0;
+float V_out_max = 5.8; //tensión de salida máxima
+
 //PWM
 int flag = 0;
 int PWM_percent=0;
 int cont_tim4 = 0;
 int cont_ADC_register = 0;
-int cont_auxiliar = 0;
+
+//Registro ADC
+uint16_t ADC_mem [TAMAÑO_MEMORIA_DATOS] = {0};
+uint16_t PWM_mem [TAMAÑO_MEMORIA_DATOS] = {0};
 
 //Filtro FIR
 uint16_t suma_ADC_values = 0;
-uint16_t ADC_register [n_filtro_fir] = {0}; //almacena los ultimos 32 datos del ADC
+uint16_t ADC_register [N_FILTRO_FIR] = {0}; //almacena los ultimos 32 datos del ADC
 uint16_t ADC_IN = 0;
-bool flag_print_table = 1; //ADC flag - pongo esta variable aqui porque ocupa 1 byte
+
+//Acondicionamiento de señal
+uint8_t R1 = 100; //resistencia de 100k
+uint8_t R2 = 100; //resistencia de 100k
 
 //Comunicación
 char bufferRx[64] = {0};
@@ -93,26 +105,33 @@ static void MX_TIM4_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	//ADC
-  if(htim->Instance == TIM4 && !flag_print_table){
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //test de velocidad
-
+  if(htim->Instance == TIM4){ //&& !flag_print_table){
+    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13,GPIO_PIN_RESET); //test de velocidad
     HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1,100) == HAL_OK){
       ADC_IN=HAL_ADC_GetValue(&hadc1);  //obtengo el valor actual
 
-      suma_ADC_values -= ADC_register[cont_tim4 & (n_filtro_fir - 1)];
-      ADC_register[cont_tim4 & (n_filtro_fir - 1)] = ADC_IN;
-      suma_ADC_values += ADC_register[cont_tim4 & (n_filtro_fir - 1)];
-      //cont_tim4 = (cont_tim4 + 1) & (n_filtro_fir - 1); //mascara para que no se pase de n_filtro_fir
+      suma_ADC_values -= ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
+      ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)] = ADC_IN;
+      suma_ADC_values += ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
+      //cont_tim4 = (cont_tim4 + 1) & (N_FILTRO_FIR - 1); //mascara para que no se pase de N_FILTRO_FIR
+     
+      //Registro de datos en memoria
+
+      if (cont_tim4 < TAMAÑO_MEMORIA_DATOS){
+        PWM_mem [cont_tim4] = PWM_percent;
+        ADC_mem [cont_tim4] = suma_ADC_values >> BITS_FILTRO_FIR;
+      }
+
 
       //Transmision de datos a consola
-      snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, suma_ADC_values >> bits_filtro_fir);
+      //snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, suma_ADC_values >> BITS_FILTRO_FIR);
       //snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, ADC_IN);
-      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      //CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 	  }
 	  cont_tim4++;
 
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //test de velocidad
+    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13,GPIO_PIN_SET); //test de velocidad
   }
 }
 
@@ -121,7 +140,7 @@ void PrintConsoleTable (){
   CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
   snprintf(bufferTx, sizeof(bufferTx), "Muestra\t PWM_percent\t ADC\r\n");
   CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
-  flag_print_table = 0;
+  //flag_print_table = 0;
 }
 
 void PrintConsolePWM (int PWM_percent){
@@ -131,24 +150,37 @@ void PrintConsolePWM (int PWM_percent){
 }
 
 
+void PrintConsoleMem(uint16_t *ADC_mem){
+  for(int i = 0; i < cont_tim4; i++){
+    ADC_to_V =3.3 * (1+R1/R2) * ADC_mem[i]/1023.0; //acondicionamiento de señal
+
+    snprintf(bufferTx, sizeof(bufferTx), "%d,%u,%.2f\r\n", i, PWM_mem[i],ADC_to_V);
+    CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+  }
+}
+
+
+
 void SetState (state estado){
 	modo = estado;
 	switch (estado){
 	case ESPERA:
     TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
-    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-    cont_tim4 = 0;
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 		PWM_percent=0;
 		break;
 	case INICIO:
     TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
-    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 		PWM_percent=0;
 		break;
 	case ESCALON_1:
-		PWM_percent=50;
+		PWM_percent=70;
 		break;
 	case ESCALON_2:
+		PWM_percent=30;
+		break;
+	case ESCALON_3:
 		PWM_percent=100;
 		break;
 	case STOP:
@@ -203,6 +235,9 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   SetState(ESPERA);
+  cont_tim4 = 0;
+  HAL_Delay(20);
+
 
   while (1)
   {
@@ -210,18 +245,26 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
   
-	  HAL_Delay(3000); //tiempo necesario para establecer la conexión micro/pc
+	  //HAL_Delay(3000); //tiempo necesario para establecer la conexión micro/pc
 
 	  SetState(INICIO);
-    PrintConsoleTable ();
 	  HAL_Delay(150);
+
 	  SetState(ESCALON_1);
-	  HAL_Delay(700);
+	  HAL_Delay(1000);
+
 	  SetState(ESCALON_2);
-	  HAL_Delay(700);
+	  HAL_Delay(1000);
+    
 	  SetState(STOP);
-    HAL_Delay(700);
+    HAL_Delay(800);
+    
     SetState(ESPERA);
+    //HAL_Delay(3000);
+
+    PrintConsoleTable();
+    PrintConsoleMem(ADC_mem);
+
 	  while(1){}
 
 	  if (flag == 1) {
