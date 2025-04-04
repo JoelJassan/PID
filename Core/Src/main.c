@@ -159,6 +159,9 @@ void PrintConsolePWM (int PWM_percent){
 
 
 void PrintConsoleMem(uint16_t *ADC_mem){
+
+  PrintConsoleTable ();
+
   for(int i = 0; i < cont_tim4; i++){
     ADC_to_V =3.3 * (1+R1/R2) * ADC_mem[i]/1023.0; //acondicionamiento de señal
 
@@ -265,9 +268,7 @@ int main(void)
     HAL_Delay(800);
     
     SetState(ESPERA);
-    //HAL_Delay(3000);
 
-    PrintConsoleTable();
     PrintConsoleMem(ADC_mem);
 
 	  while(1){}
