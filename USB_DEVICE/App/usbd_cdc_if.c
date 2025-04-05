@@ -270,7 +270,6 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   memcpy (bufferRx, Buf, (uint8_t)*Len); //copia el buffer de recepcion en bufferRx
   memset (Buf, '\0', (uint8_t)*Len); //limpia el buffer de recepcion
 
-  flag = 1;
   return (USBD_OK);
   /* USER CODE END 6 */
 }
