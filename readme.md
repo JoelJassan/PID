@@ -33,5 +33,12 @@ Estas etapas no se reflejan en el repositorio `.git`, ya que el repositorio fue 
   Tp1 = 0.13677  
   La misma se aproxima en un 78.59% a la obtenida en el ADC.
 
+- Ingresando estos datos en Matlab (ver código PIDtuner.m) se obtiene la función transferencia del controlador
+  Gcontrol (s) = Kp + Ki*1/s + Kd*s
+  Kp = 23 (no reemplaza a la constante de G(s))
+  Ki = 315  
+  kd = 0
+  [Video de referencia al pidTune de Matlab](https://www.youtube.com/watch?v=cahJBH60_P0)
+
 ## Licencia
 Este proyecto está bajo la licencia MIT. El código es de uso libre. Para más detalles, consulta el archivo [LICENSE](./LICENSE).
