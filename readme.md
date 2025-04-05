@@ -26,7 +26,7 @@ Estas etapas no se reflejan en el repositorio `.git`, ya que el repositorio fue 
 ### v0.3
 - Se añade filtro FIR a la muestra de datos. Se pasa el código de matlab a python.
 
-### v0.4 (actual) :construction:
+### v1.0 (actual): Controlador PID funcionando correctamente
 - Se añade código para PID a partir de la planta obtenida en Matlab:
   G(s) = Kp/(1+Tp1*s)
   Kp = 0.1026

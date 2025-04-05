@@ -311,6 +311,12 @@ int main(void)
     snprintf(bufferTx, sizeof(bufferTx), "PWM: %u - V_tac: %.2f\r\n", PWM_percent,ADC_to_V);
     CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 
+    if (PWM_percent > 300){
+      snprintf(bufferTx, sizeof(bufferTx), "Error de tensión. Reiniciar sistema!\r");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+    }
+
     //memoria para próximo ciclo
     error_T0 = error_T;
     integral_T0 = integral_T;
