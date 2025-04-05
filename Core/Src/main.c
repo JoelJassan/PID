@@ -72,7 +72,6 @@ float ADC_to_V = 0;
 float V_out_max = 5.8; //tensión de salida máxima
 
 //PWM
-int flag = 0;
 int PWM_percent=0;
 int cont_tim4 = 0;
 int cont_ADC_register = 0;
@@ -113,8 +112,8 @@ static void MX_TIM4_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	//ADC
-  if(htim->Instance == TIM4){ //&& !flag_print_table){
-    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13,GPIO_PIN_RESET); //test de velocidad
+  if(htim->Instance == TIM4){
+
     HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1,100) == HAL_OK){
       ADC_IN=HAL_ADC_GetValue(&hadc1);  //obtengo el valor actual
@@ -122,24 +121,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
       suma_ADC_values -= ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
       ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)] = ADC_IN;
       suma_ADC_values += ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
-      //cont_tim4 = (cont_tim4 + 1) & (N_FILTRO_FIR - 1); //mascara para que no se pase de N_FILTRO_FIR
      
       //Registro de datos en memoria
-
       if (cont_tim4 < TAMAÑO_MEMORIA_DATOS){
         PWM_mem [cont_tim4] = PWM_percent;
         ADC_mem [cont_tim4] = suma_ADC_values >> BITS_FILTRO_FIR;
       }
-
-
-      //Transmision de datos a consola
-      //snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, suma_ADC_values >> BITS_FILTRO_FIR);
-      //snprintf(bufferTx, sizeof(bufferTx), "%d,%d,%u\r\n", cont_tim4, PWM_percent, ADC_IN);
-      //CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 	  }
 	  cont_tim4++;
-
-    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13,GPIO_PIN_SET); //test de velocidad
   }
 }
 
@@ -148,7 +137,6 @@ void PrintConsoleTable (){
   CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
   snprintf(bufferTx, sizeof(bufferTx), "Muestra\t PWM_percent\t ADC\r\n");
   CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
-  //flag_print_table = 0;
 }
 
 void PrintConsolePWM (int PWM_percent){
@@ -169,8 +157,6 @@ void PrintConsoleMem(uint16_t *ADC_mem){
     CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
   }
 }
-
-
 
 void SetState (state estado){
 	modo = estado;
@@ -246,7 +232,6 @@ int main(void)
   cont_tim4 = 0;
   HAL_Delay(20);
 
-
   while (1)
   {
     /* USER CODE END WHILE */
@@ -260,9 +245,6 @@ int main(void)
 
 	  SetState(ESCALON_1);
 	  HAL_Delay(1000);
-
-	  //SetState(ESCALON_2);
-	  //HAL_Delay(1000);
     
 	  SetState(STOP);
     HAL_Delay(800);
@@ -272,16 +254,6 @@ int main(void)
     PrintConsoleMem(ADC_mem);
 
 	  while(1){}
-
-	  if (flag == 1) {
-		  //Actualiza PWM
-		  PWM_percent = atoi(bufferRx); //convierto cadena a entero
-		  if (PWM_percent < 0) PWM_percent = 0;
-		  if (PWM_percent > 100) PWM_percent = 100;
-		  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
-
-      flag = 0;
-	  }
 
   }
   /* USER CODE END 3 */
