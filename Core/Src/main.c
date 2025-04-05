@@ -54,9 +54,33 @@ typedef enum {
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+//Filtro FIR de ruido
 #define N_FILTRO_FIR 32
 #define BITS_FILTRO_FIR (__builtin_ctz(N_FILTRO_FIR))
+
+//Registro de datos de ADC filtrado
 #define TAMAÑO_MEMORIA_DATOS 4000
+
+//Constantes de la planta (creo que no son necesarias)
+#define K0 0.1026 //Ganancia de la planta
+#define gamma0 0.13677 //Tiempo de la planta
+
+//Constantes del PID, en el dominio S
+#define Kp 23
+#define Ki 315
+#define Kd 0
+#define Ts 0.001 //Tiempo de muestreo
+
+//Constantes del PID, en el dominio Z (se añade el tiempo de muestreo)
+#define Kp_z Kp
+#define Ki_z Ki*Ts
+#define Kd_z Kd/Ts
+
+
+#define Ti Kp/Ki
+#define Td Kd/Kp
+
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -70,6 +94,9 @@ TIM_HandleTypeDef htim4;
 //Acondconamento de señal
 float ADC_to_V = 0;
 float V_out_max = 5.8; //tensión de salida máxima
+
+//Parametros de PID
+float set_point, error_T, integral_T, derivada_T, error_T0, integral_T0  = 0.0;
 
 //PWM
 int PWM_percent=0;
@@ -123,10 +150,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
       suma_ADC_values += ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
      
       //Registro de datos en memoria
+      /*
       if (cont_tim4 < TAMAÑO_MEMORIA_DATOS){
         PWM_mem [cont_tim4] = PWM_percent;
         ADC_mem [cont_tim4] = suma_ADC_values >> BITS_FILTRO_FIR;
       }
+      */
+
+      //acondicionamiento de señal
+      ADC_to_V =3.3 * (1+R1/R2) * (suma_ADC_values >> BITS_FILTRO_FIR)/1023.0;
 	  }
 	  cont_tim4++;
   }
@@ -158,6 +190,14 @@ void PrintConsoleMem(uint16_t *ADC_mem){
   }
 }
 
+void SetPWM (int PWM_percent){
+  // Anti-windup
+  if (PWM_percent > 100) PWM_percent = 100;
+  if (PWM_percent < 0) PWM_percent = 0;
+  
+  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
+}
+
 void SetState (state estado){
 	modo = estado;
 	switch (estado){
@@ -168,8 +208,8 @@ void SetState (state estado){
 		break;
 	case INICIO:
     TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-		PWM_percent=0;
+    //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+		//PWM_percent=0;
 		break;
 	case ESCALON_1:
 		PWM_percent=30;
@@ -182,7 +222,7 @@ void SetState (state estado){
     break;
 	}
 
-	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
+  SetPWM (PWM_percent);
 }
 
 /* USER CODE END 0 */
@@ -228,19 +268,21 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  /*
   SetState(ESPERA);
   cont_tim4 = 0;
   HAL_Delay(20);
+  */
+  set_point = 3;
+  SetState(INICIO);
 
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  
-	  //HAL_Delay(3000); //tiempo necesario para establecer la conexión micro/pc
-
-	  SetState(INICIO);
+	  
+    /*
 	  HAL_Delay(150);
 
 	  SetState(ESCALON_1);
@@ -254,6 +296,24 @@ int main(void)
     PrintConsoleMem(ADC_mem);
 
 	  while(1){}
+    */
+
+    //cálculo de constantes PID
+    error_T = set_point - ADC_to_V;
+    integral_T = Ki_z*error_T + integral_T0;
+    derivada_T = Kd_z*(error_T - error_T0);
+    
+    //Adaptación: tension a pwm
+    PWM_percent = Kp_z*error_T + integral_T + derivada_T;
+    SetPWM(PWM_percent);
+
+    //Imprimir en consola info relevante
+    snprintf(bufferTx, sizeof(bufferTx), "PWM: %u - V_tac: %.2f\r\n", PWM_percent,ADC_to_V);
+    CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+
+    //memoria para próximo ciclo
+    error_T0 = error_T;
+    integral_T0 = integral_T;
 
   }
   /* USER CODE END 3 */
