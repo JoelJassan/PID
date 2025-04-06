@@ -311,9 +311,11 @@ int main(void)
     snprintf(bufferTx, sizeof(bufferTx), "PWM: %u - V_tac: %.2f\r\n", PWM_percent,ADC_to_V);
     CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
 
-    if (PWM_percent > 300){
+    if (PWM_percent > 1000){
       snprintf(bufferTx, sizeof(bufferTx), "Error de tensión. Reiniciar sistema!\r");
+      SetPWM(0);
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
       break;
     }
 
