@@ -33,7 +33,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 extern char bufferRx[64];
-extern int flag;
+extern bool flag_bufferRx;
+
 //extern uint8_t buffer[20];
 /* USER CODE END PV */
 
@@ -269,6 +270,8 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   memset (bufferRx, '\0', sizeof(bufferRx)); //limpia el bufferRx
   memcpy (bufferRx, Buf, (uint8_t)*Len); //copia el buffer de recepcion en bufferRx
   memset (Buf, '\0', (uint8_t)*Len); //limpia el buffer de recepcion
+
+  flag_bufferRx = 1;
 
   return (USBD_OK);
   /* USER CODE END 6 */

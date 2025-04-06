@@ -119,6 +119,7 @@ uint8_t R2 = 100; //resistencia de 100k
 //Comunicación
 char bufferRx[64] = {0};
 char bufferTx[64] = {0};
+bool flag_bufferRx;
 
 static state modo;
 
@@ -297,6 +298,10 @@ int main(void)
 
 	  while(1){}
     */
+   if (flag_bufferRx){
+    set_point = atof(bufferRx);
+    flag_bufferRx = 0;
+   }
 
     //cálculo de constantes PID
     error_T = set_point - ADC_to_V;
