@@ -127,7 +127,7 @@ bool flag_bufferRx;
 
 bool flag_adc_read = 0;
 
-static state modo;
+static state tarea;
 
 /* USER CODE END PV */
 
@@ -221,10 +221,11 @@ void SetPIDtoZero(){
 	derivada_T = 0;
 	error_T0 = 0;
 	integral_T0  = 0.0;
+	//PWM_percent = 0;
 }
 
-void SetState (state estado){
-	modo = estado;
+void SetWork (state estado){
+	tarea = estado;
 	switch (estado){
 	case WAIT:
     TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
@@ -312,28 +313,35 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  SetState(START);
-  HAL_Delay(1000); //tiempo de conexión PC/micro
-  HAL_Delay(1000);
-  SetState(WAIT); 
-  HAL_Delay(100);
-  SetPIDtoZero();
-  SetState(START); //cont_tim4 empieza a sumarse
+  
+  //state = wait;
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led  
+  set_point = 0;
+  AdjustPWM(0);
+  TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+
+  HAL_Delay(2000); //tiempo de conexión PC/micro
   cont_tim4 = 0;
+  SetPIDtoZero();
+
+  //state = start;
+  TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); //enciendo led
   
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
     //Rutina
-    if (cont_tim4 == 500) SetState(SP_1);
-    if (cont_tim4 == 1500) SetState(SP_2);
-    if (cont_tim4 == 2000) SetState(SP_3);
-    if (cont_tim4 == 2500) SetState(STOP);
+    if (cont_tim4 == 500) set_point = 1;
+    if (cont_tim4 == 1500) set_point = 4.5;
+    if (cont_tim4 == 2000) set_point = 1.8;
+    if (cont_tim4 == 2500) set_point = 0;
     if (cont_tim4 >= 3000){
-      SetState(WAIT);
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
+      TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+      
       PrintConsoleMem(ADC_to_V_mem, PWM_mem); //imprimo en consola
       //snprintf(bufferTx, sizeof(bufferTx), "Fin de la muestra de datos!\r\n");
       //CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
@@ -519,7 +527,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
-  sConfigOC.Pulse = 250;
+  sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
