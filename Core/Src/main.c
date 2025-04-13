@@ -187,7 +187,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
     //Rutina
     if (Data_mem.cont_tim4 == 500)  SetSetPoint(1) ;
-    if (Data_mem.cont_tim4 == 1500) SetSetPoint(4.5);
+    if (Data_mem.cont_tim4 == 1500) SetSetPoint(3);
     if (Data_mem.cont_tim4 == 2000) SetSetPoint(1.8);
     if (Data_mem.cont_tim4 == 2500) SetSetPoint(0);
     if (Data_mem.cont_tim4 >= 3000){
@@ -209,6 +209,7 @@ int main(void)
 
     if (flag_adc_read == true){
       PWM_percent = PIDRefresh(ADC_to_V);
+      __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
 
       //limitador de error acumulado
       if (PID.Maths.integral > 1000){
