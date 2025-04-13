@@ -33,18 +33,12 @@
 #include "usbd_cdc_if.h"
 #include <string.h>
 #include <stdio.h>
+#include "pid.h"
+#include "communication.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef enum {
-	WAIT,
-	START,
-	SP_1,
-	SP_2,
-  SP_3,
-  STOP,
-}state;
 
 /* USER CODE END PTD */
 
@@ -55,32 +49,10 @@ typedef enum {
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-//Filtro FIR de ruido
-#define N_FILTRO_FIR 32
-#define BITS_FILTRO_FIR (__builtin_ctz(N_FILTRO_FIR))
-
-//Registro de datos de ADC filtrado
-#define TAMAÑO_MEMORIA_DATOS 4000
 
 //Constantes de la planta (creo que no son necesarias)
 #define K0 0.1026 //Ganancia de la planta
 #define gamma0 0.13677 //Tiempo de la planta
-
-//Constantes del PID, en el dominio S
-#define Kp 23
-#define Ki 315
-#define Kd 0
-#define Ts 0.001 //Tiempo de muestreo
-
-//Constantes del PID, en el dominio Z (se añade el tiempo de muestreo)
-#define Kp_z Kp
-#define Ki_z Ki*Ts
-#define Kd_z Kd/Ts
-
-
-#define Ti Kp/Ki
-#define Td Kd/Kp
-
 
 /* USER CODE END PM */
 
@@ -92,42 +64,21 @@ TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
 
-//Acondconamento de señal
+//Acondcionamiento de señal
 float ADC_to_V = 0;
-float V_out_max = 5.8; //tensión de salida máxima
-
-//Parametros de PID
-float set_point, error_T, integral_T, derivada_T, error_T0, integral_T0  = 0.0;
-
-//PWM
-int cont_tim4 = 0;
 
 //Registro ADC
-float ADC_to_V_mem [TAMAÑO_MEMORIA_DATOS] = {0};
-float set_point_mem [TAMAÑO_MEMORIA_DATOS] = {0};
-
-//Filtro FIR
 uint16_t suma_ADC_values = 0;
 uint16_t ADC_register [N_FILTRO_FIR] = {0}; //almacena los ultimos 32 datos del ADC
 uint16_t ADC_IN = 0;
 
-uint8_t PWM_mem [TAMAÑO_MEMORIA_DATOS] = {0};
-
 //Acondicionamiento de señal
 uint8_t R1 = 100; //resistencia de 100k
 uint8_t R2 = 100; //resistencia de 100k
-
 uint8_t PWM_percent = 0;
 
-
 //Comunicación
-char bufferRx[64] = {0};
-char bufferTx[64] = {0};
-bool flag_bufferRx;
-
 bool flag_adc_read = 0;
-
-static state tarea;
 
 /* USER CODE END PV */
 
@@ -150,124 +101,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
     HAL_ADC_Start(&hadc1);
 	  if (HAL_ADC_PollForConversion(&hadc1,100) == HAL_OK){
-      ADC_IN=HAL_ADC_GetValue(&hadc1);  //obtengo el valor actual
+      ADC_IN = HAL_ADC_GetValue(&hadc1);  //obtengo el valor actual
 
-      suma_ADC_values -= ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
-      ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)] = ADC_IN;
-      suma_ADC_values += ADC_register[cont_tim4 & (N_FILTRO_FIR - 1)];
+      suma_ADC_values -= ADC_register[Data_mem.cont_tim4 & (N_FILTRO_FIR - 1)];
+      ADC_register[Data_mem.cont_tim4 & (N_FILTRO_FIR - 1)] = ADC_IN;
+      suma_ADC_values += ADC_register[Data_mem.cont_tim4 & (N_FILTRO_FIR - 1)];
      
       //acondicionamiento de señal
       ADC_to_V =3.3 * (1+R1/R2) * (suma_ADC_values >> BITS_FILTRO_FIR)/1023.0;
 
       //Registro de datos en memoria
-      if (cont_tim4 < TAMAÑO_MEMORIA_DATOS){
-        PWM_mem [cont_tim4] = PWM_percent;
-        ADC_to_V_mem [cont_tim4] = ADC_to_V;
-        set_point_mem [cont_tim4] = set_point;
+      if (Data_mem.cont_tim4 < TAMAÑO_MEMORIA_DATOS){
+        Data_mem.PWM [Data_mem.cont_tim4] = PWM_percent;
+        Data_mem.ADC_to_V [Data_mem.cont_tim4] = ADC_to_V;
+        Data_mem.set_point [Data_mem.cont_tim4] = PID.Maths.set_point;
       }
 	  }
-	  cont_tim4++;
+	  Data_mem.cont_tim4++;
     flag_adc_read = true;
   }
-}
-
-void PrintConsoleTable (){
-  snprintf(bufferTx, sizeof(bufferTx), "ADC Read (10 bits)\r\n");
-  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
-  snprintf(bufferTx, sizeof(bufferTx), "Muestra\t PWM_percent\t Set_Point\t ADC_to_V\r\n");
-  CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
-}
-
-void PrintConsolePWM (float PWM_percent){
-	//Transmisión de datos a consola
-	snprintf(bufferTx, sizeof(bufferTx), "### --- PWM set to %.0f%% ------------- ###\r\n", PWM_percent); //carga el bufferTx con la info de PWM_percent
-	CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
-}
-
-
-void PrintConsoleMem(float *ADC_to_V_mem, uint8_t *PWM_mem){
-
-  PrintConsoleTable ();
-
-  for(int i = 0; i < cont_tim4; i++){
-    if (0 == (i & 0x1F)) HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //parpadeo led
-
-    snprintf(bufferTx, sizeof(bufferTx), "%d,%u,%.2f,%.2f\r\n", i, PWM_mem[i], set_point_mem[i], ADC_to_V_mem[i]);
-    CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
-  }
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
-}
-
-void AdjustPWM (uint8_t PWM_percent){
-  // Anti-windup
-  if (PWM_percent >= 100) PWM_percent = 100;
-  if (PWM_percent <= 0) PWM_percent = 0;
-  
-  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
-}
-
-float AdjustSetPoint (float set_point){
-  // Anti-windup
-  if (set_point >= 5.8) set_point = 5.8;
-  if (set_point <= 0) set_point = 0;
-
-  return set_point;
-}
-
-void SetPIDtoZero(){
-	set_point = 0;
-	error_T = 0;
-	integral_T = 0;
-	derivada_T = 0;
-	error_T0 = 0;
-	integral_T0  = 0.0;
-	//PWM_percent = 0;
-}
-
-void SetWork (state estado){
-	tarea = estado;
-	switch (estado){
-	case WAIT:
-    TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-		break;
-	case START:
-    TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-    set_point = -1;
-		break;
-	case SP_1:
-		set_point = 2;
-		break;
-	case SP_2:
-    set_point = 3.5;
-		break;
-	case SP_3:
-		set_point = 1.8;
-    break;
-	case STOP:
-		set_point = 0;
-    break;
-	}
-
-  set_point = AdjustSetPoint(set_point);
-}
-
-float RefreshPID(float set_point, float ADC_to_V){
-  //Cálculo de PID
-  error_T = set_point - ADC_to_V;
-  integral_T = Ki_z*error_T + integral_T0;
-  derivada_T = Kd_z*(error_T - error_T0);
-
-  //Adaptación: tension a pwm
-  PWM_percent = Kp_z*error_T + integral_T + derivada_T;
-  AdjustPWM(PWM_percent);
-
-  //memoria para próximo ciclo
-  error_T0 = error_T;
-  integral_T0 = integral_T;
-
-  return PWM_percent;
 }
 
 /* USER CODE END 0 */
@@ -280,7 +132,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  PIDCreate(Kp,Ki,Kd,Ts);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -316,13 +168,13 @@ int main(void)
   
   //state = wait;
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led  
-  set_point = 0;
-  AdjustPWM(0);
   TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
 
   HAL_Delay(2000); //tiempo de conexión PC/micro
-  cont_tim4 = 0;
-  SetPIDtoZero();
+  
+  //esto se deberia poder sacar
+  ClearMemory();
+  PIDReset(); 
 
   //state = start;
   TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
@@ -334,42 +186,33 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     //Rutina
-    if (cont_tim4 == 500) set_point = 1;
-    if (cont_tim4 == 1500) set_point = 4.5;
-    if (cont_tim4 == 2000) set_point = 1.8;
-    if (cont_tim4 == 2500) set_point = 0;
-    if (cont_tim4 >= 3000){
+    if (Data_mem.cont_tim4 == 500)  SetSetPoint(1) ;
+    if (Data_mem.cont_tim4 == 1500) SetSetPoint(4.5);
+    if (Data_mem.cont_tim4 == 2000) SetSetPoint(1.8);
+    if (Data_mem.cont_tim4 == 2500) SetSetPoint(0);
+    if (Data_mem.cont_tim4 >= 3000){
       HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
       TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
       
-      PrintConsoleMem(ADC_to_V_mem, PWM_mem); //imprimo en consola
-      //snprintf(bufferTx, sizeof(bufferTx), "Fin de la muestra de datos!\r\n");
-      //CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      PrintConsoleMemory(); //imprimo en consola
 
       while(1){}
     };    
     
-    //if (cont_tim4 == 1500) SetState(SP_2);
-    //if (cont_tim4 >= 2000) SetState(SP_3);
-    
-	  
+	  /* RECEPCION DE DATOS por usb
     if (flag_bufferRx){
       set_point = atof(bufferRx);
       set_point = AdjustSetPoint(set_point);
       flag_bufferRx = 0;
     }
+      */
 
     if (flag_adc_read == true){
-      PWM_percent = RefreshPID(set_point, ADC_to_V);
-      AdjustPWM(PWM_percent);
-      //Imprimir en consola info relevante
-      //snprintf(bufferTx, sizeof(bufferTx), "PWM: %u - V_tac: %.2f\r\n", PWM_percent,ADC_to_V);
-      //CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      PWM_percent = PIDRefresh(ADC_to_V);
 
       //limitador de error acumulado
-      if (integral_T > 1000){
-        PWM_percent = 0;
-        AdjustPWM(PWM_percent);
+      if (PID.Maths.integral > 1000){
+        AdjustPWM(0);
         snprintf(bufferTx, sizeof(bufferTx), "Error de tensión. Reiniciar sistema!\r");
         CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
