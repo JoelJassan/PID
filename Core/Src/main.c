@@ -64,21 +64,22 @@ TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
 
-//Acondcionamiento de señal
-float ADC_to_V = 0;
-
 //Registro ADC
 uint16_t suma_ADC_values = 0;
 uint16_t ADC_register [N_FILTRO_FIR] = {0}; //almacena los ultimos 32 datos del ADC
 uint16_t ADC_IN = 0;
 
 //Acondicionamiento de señal
+float ADC_to_V = 0;
+
 uint8_t R1 = 100; //resistencia de 100k
 uint8_t R2 = 100; //resistencia de 100k
 uint8_t PWM_percent = 0;
 
 //Comunicación
 bool flag_adc_read = 0;
+
+instrucciones_t estado_actual = WAIT;
 
 /* USER CODE END PV */
 
@@ -90,6 +91,74 @@ static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
+void SwitchMode(instrucciones_t mode){
+  estado_actual = mode;
+
+  switch(estado_actual){
+    case WAIT:
+      snprintf(bufferTx, sizeof(bufferTx), "Esperando...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case ROUTINE: 
+      snprintf(bufferTx, sizeof(bufferTx), "Ejecución de Rutina...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case PID_PARAMETERS_READ:
+      snprintf(bufferTx, sizeof(bufferTx), "Leyendo parámetros PID...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      snprintf(bufferTx, sizeof(bufferTx), "Kp_z: %.3f\r\nKi_z: %.3f\r\nKd_z: %.3f\r\nTs: %.3f",PID.Kp_z,PID.Ki_z,PID.Kd_z,PID.Ts);
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case PID_SET_POINT_READ:
+      snprintf(bufferTx, sizeof(bufferTx), "Set Point: %.1f\r\n",PID.Maths.set_point);
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case PID_SET_POINT_SET:
+      snprintf(bufferTx, sizeof(bufferTx), "Set Point ajustado a : %.1f\r\n",PID.Maths.set_point);
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case PID_START:
+      snprintf(bufferTx, sizeof(bufferTx), "Iniciando ejecución...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case CLEAR_MEMORY:
+      snprintf(bufferTx, sizeof(bufferTx), "Borrando memoria...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+  }
+}
+
+void ProccessBufferRx(char* bufferRx){
+  if (strncmp(bufferRx, "wait", 4) == 0){
+    SwitchMode(WAIT);
+  }
+  else if (strncmp(bufferRx, "routine", 7) == 0){
+    SwitchMode(ROUTINE);
+  }
+  else if (strncmp(bufferRx, "clear", 5) == 0){
+    SwitchMode(CLEAR_MEMORY);
+  }
+  else if (strncmp(bufferRx, "pid parameters", 14) == 0){
+    SwitchMode(PID_PARAMETERS_READ);
+  }
+  else if (strncmp(bufferRx, "set point", 9) == 0){
+    SwitchMode(PID_SET_POINT_READ);
+  }
+
+  else if (strncmp(bufferRx, "SP: ", 3) == 0){
+    SwitchMode(PID_SET_POINT_SET);
+  }
+  else if (strncmp(bufferRx, "start", 5) == 0){
+    SwitchMode(PID_START);
+  }
+  
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -132,7 +201,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  PIDCreate(Kp,Ki,Kd,Ts);
+  PIDCreate(Kp,Ki,Kd,Tss);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -167,49 +236,90 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   
   //state = wait;
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led  
-  TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led  
+  //TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
 
-  HAL_Delay(2000); //tiempo de conexión PC/micro
+  //HAL_Delay(2000); //tiempo de conexión PC/micro
   
   //esto se deberia poder sacar
   ClearMemory();
   PIDReset(); 
 
   //state = start;
-  TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); //enciendo led
+  //TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
+  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); //enciendo led
   
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    //Rutina
-    if (Data_mem.cont_tim4 == 500)  SetSetPoint(1) ;
-    if (Data_mem.cont_tim4 == 1500) SetSetPoint(3);
-    if (Data_mem.cont_tim4 == 2000) SetSetPoint(1.8);
-    if (Data_mem.cont_tim4 == 2500) SetSetPoint(0);
-    if (Data_mem.cont_tim4 >= 3000){
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
-      TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
       
-      PrintConsoleMemory(); //imprimo en consola
-
-      while(1){}
-    };    
     
-	  /* RECEPCION DE DATOS por usb
+	  // RECEPCION DE DATOS por usb
     if (flag_bufferRx){
-      set_point = atof(bufferRx);
-      set_point = AdjustSetPoint(set_point);
       flag_bufferRx = 0;
+      ProccessBufferRx(bufferRx);
     }
-      */
+
+    // Estados
+    if (estado_actual == WAIT){
+      SetSetPoint(0);
+      TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
+    }
+
+    if (estado_actual == ROUTINE){
+      TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); //enciendo led
+
+      //Rutina
+      if (Data_mem.cont_tim4 == 500)  SetSetPoint(1) ;
+      if (Data_mem.cont_tim4 == 1500) SetSetPoint(3);
+      if (Data_mem.cont_tim4 == 2000) SetSetPoint(1.8);
+      if (Data_mem.cont_tim4 == 2500) SetSetPoint(0);
+      if (Data_mem.cont_tim4 >= 3000){
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
+        TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
+        
+        PrintConsoleMemory(); //imprimo en consola
+        SwitchMode(WAIT);
+      };
+    }
+
+    if (estado_actual == PID_START){
+      TIM4->DIER |= TIM_DIER_UIE; //habilito interrupciones de timer4
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); //enciendo led
+    }
+
+    if (estado_actual == PID_SET_POINT_SET){
+      //SetSetPoint(ADC_to_V); //esto no se si va, pero lo dejo por las dudas
+      char* ptr = bufferRx + 3; //apunto al valor del set point
+      float set_point = strtof(ptr, NULL); //convierto el string a float
+      SetSetPoint(set_point); //seteo el set point
+      snprintf(bufferTx, sizeof(bufferTx), "Set Point: %.1f\r\n", PID.Maths.set_point);
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      SwitchMode(PID_START);
+    }
+
+    if(estado_actual == CLEAR_MEMORY){
+      ClearMemory();
+      snprintf(bufferTx, sizeof(bufferTx), "Memoria de datos borrada\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      SwitchMode(WAIT);
+    }
+    
+    
 
     if (flag_adc_read == true){
       PWM_percent = PIDRefresh(ADC_to_V);
       __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,PWM_percent*10);
+
+      //Imprimir en consola info relevante
+      if(estado_actual != ROUTINE){
+        snprintf(bufferTx, sizeof(bufferTx), "PWM: %u - V_tac: %.2f\r\n", PWM_percent,ADC_to_V);
+        CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      }
 
       //limitador de error acumulado
       if (PID.Maths.integral > 1000){
@@ -223,7 +333,7 @@ int main(void)
       flag_adc_read = false;
     }
   }
-    
+
   /* USER CODE END 3 */
 }
 

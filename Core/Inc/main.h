@@ -53,7 +53,7 @@ extern "C" {
 #define Kp 23
 #define Ki 315
 #define Kd 0
-#define Ts 0.001 //Tiempo de muestreo
+#define Tss 0.001 //Tiempo de muestreo
 
 /* USER CODE END EM */
 
@@ -76,6 +76,21 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
+typedef enum {
+  WAIT,
+  //PID_PARAMETERS_SET,
+  PID_PARAMETERS_READ,
+  PID_SET_POINT_SET,
+  PID_SET_POINT_READ,
+  PID_START,
+  ROUTINE,
+  CLEAR_MEMORY,
+} instrucciones_t;
+
+extern instrucciones_t estado_actual;
+
+
+void SwitchMode(instrucciones_t mode);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
