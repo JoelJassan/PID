@@ -210,9 +210,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
         Data_mem.PWM [Data_mem.cont_tim4] = PWM_percent;
         Data_mem.ADC_to_V [Data_mem.cont_tim4] = ADC_to_V;
         Data_mem.set_point [Data_mem.cont_tim4] = PID.Maths.set_point;
+        Data_mem.cont_tim4++;
       }
 	  }
-	  Data_mem.cont_tim4++;
+	  
     flag_adc_read = true;
   }
 }
