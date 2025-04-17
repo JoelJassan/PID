@@ -77,9 +77,11 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 
 typedef enum {
+  STOP,
   WAIT,
-  //PID_PARAMETERS_SET,
+  PID_PARAMETERS_SET,
   PID_PARAMETERS_READ,
+  PID_PARAMETERS_RESET,
   PID_SET_POINT_SET,
   PID_SET_POINT_READ,
   PID_START,

@@ -68,9 +68,13 @@ uint8_t PIDRefresh(float ADC_to_V);
 //! Crea la estructura del PID e inicializa los parámetros
 void PIDCreate(float Kp, float Ki, float Kd, float Ts);
 
-//! Ajusta el set point del PID
+//! Modifica el set point del PID
 void SetSetPoint(float set_point);
 
+//! Modifica las constantes del PID
+void SetPIDConst (float *param,float value);
+
+//! Ajusta el PWM del controlador
 void AdjustPWM(uint8_t PWM_percent);
 
 #endif

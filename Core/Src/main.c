@@ -79,7 +79,7 @@ uint8_t PWM_percent = 0;
 //Comunicación
 bool flag_adc_read = 0;
 
-instrucciones_t estado_actual = WAIT;
+instrucciones_t estado_actual = STOP;
 
 /* USER CODE END PV */
 
@@ -95,6 +95,11 @@ void SwitchMode(instrucciones_t mode){
   estado_actual = mode;
 
   switch(estado_actual){
+    case STOP:
+      snprintf(bufferTx, sizeof(bufferTx), "Detenido...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
     case WAIT:
       snprintf(bufferTx, sizeof(bufferTx), "Esperando...\r\n");
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
@@ -118,7 +123,12 @@ void SwitchMode(instrucciones_t mode){
       break;
 
     case PID_SET_POINT_SET:
-      snprintf(bufferTx, sizeof(bufferTx), "Set Point ajustado a : %.1f\r\n",PID.Maths.set_point);
+      snprintf(bufferTx, sizeof(bufferTx), "Modificando Set Point...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
+
+    case PID_PARAMETERS_SET:
+      snprintf(bufferTx, sizeof(bufferTx), "Modificando parametros del PID...\r\n");
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
       break;
 
@@ -131,11 +141,19 @@ void SwitchMode(instrucciones_t mode){
       snprintf(bufferTx, sizeof(bufferTx), "Borrando memoria...\r\n");
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
       break;
+    
+    case PID_PARAMETERS_RESET:
+      snprintf(bufferTx, sizeof(bufferTx), "Reiniciando variables del PID...\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      break;
   }
 }
 
 void ProccessBufferRx(char* bufferRx){
-  if (strncmp(bufferRx, "wait", 4) == 0){
+  if (strncmp(bufferRx, "stop", 4) == 0){
+    SwitchMode(STOP);
+  }
+  else if (strncmp(bufferRx, "wait", 4) == 0){
     SwitchMode(WAIT);
   }
   else if (strncmp(bufferRx, "routine", 7) == 0){
@@ -143,6 +161,9 @@ void ProccessBufferRx(char* bufferRx){
   }
   else if (strncmp(bufferRx, "clear", 5) == 0){
     SwitchMode(CLEAR_MEMORY);
+  }
+  else if (strncmp(bufferRx, "pid reset", 9) == 0){
+    SwitchMode(PID_PARAMETERS_RESET);
   }
   else if (strncmp(bufferRx, "pid parameters", 14) == 0){
     SwitchMode(PID_PARAMETERS_READ);
@@ -154,6 +175,11 @@ void ProccessBufferRx(char* bufferRx){
   else if (strncmp(bufferRx, "SP: ", 3) == 0){
     SwitchMode(PID_SET_POINT_SET);
   }
+
+  else if (strncmp(bufferRx,"Kp: ", 3) == 0 || strncmp(bufferRx,"Ki: ", 3) == 0 || strncmp(bufferRx,"Kp: ", 3) == 0){
+    SwitchMode(PID_PARAMETERS_SET);
+  }
+
   else if (strncmp(bufferRx, "start", 5) == 0){
     SwitchMode(PID_START);
   }
@@ -263,10 +289,14 @@ int main(void)
     }
 
     // Estados
-    if (estado_actual == WAIT){
+    if (estado_actual == STOP){
       SetSetPoint(0);
       TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
       HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); //apago led
+    }
+
+    if (estado_actual == WAIT){
+      
     }
 
     if (estado_actual == ROUTINE){
@@ -283,7 +313,7 @@ int main(void)
         TIM4->DIER &= ~TIM_DIER_UIE; //deshabilito interrupciones de timer4
         
         PrintConsoleMemory(); //imprimo en consola
-        SwitchMode(WAIT);
+        SwitchMode(STOP);
       };
     }
 
@@ -293,18 +323,51 @@ int main(void)
     }
 
     if (estado_actual == PID_SET_POINT_SET){
-      //SetSetPoint(ADC_to_V); //esto no se si va, pero lo dejo por las dudas
       char* ptr = bufferRx + 3; //apunto al valor del set point
       float set_point = strtof(ptr, NULL); //convierto el string a float
       SetSetPoint(set_point); //seteo el set point
       snprintf(bufferTx, sizeof(bufferTx), "Set Point: %.1f\r\n", PID.Maths.set_point);
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
-      SwitchMode(PID_START);
+      SwitchMode(WAIT);
+    }
+
+    if (estado_actual == PID_PARAMETERS_SET){
+      char* ptr = bufferRx + 3; //apunto al valor del set point
+      float value = strtof(ptr, NULL); //convierto el string a float
+
+      //Filtro de constante
+      if (strncmp(bufferRx, "Kp: ", 3) == 0){
+        value = value;  //constante Kp
+        SetPIDConst(&PID.Kp_z, value);
+        snprintf(bufferTx, sizeof(bufferTx), "Kp_z seteado a: %.3f\r\n", PID.Kp_z);
+        CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      }
+      if (strncmp(bufferRx, "Ki: ", 3) == 0){
+        value = value * PID.Ts; //constante Ki
+        SetPIDConst(&PID.Ki_z, value);
+        snprintf(bufferTx, sizeof(bufferTx), "Ki_z seteado a: %.3f\r\n", PID.Ki_z);
+        CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      }
+      if (strncmp(bufferRx, "Kd: ", 3) == 0){
+        value = value / PID.Ts; //constante Ki
+        SetPIDConst(&PID.Kd_z, value);
+        snprintf(bufferTx, sizeof(bufferTx), "Kd_z seteado a: %.3f\r\n", PID.Kd_z);
+        CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx)); //imprimo en consola
+      }
+
+      SwitchMode(WAIT);
     }
 
     if(estado_actual == CLEAR_MEMORY){
       ClearMemory();
-      snprintf(bufferTx, sizeof(bufferTx), "Memoria de datos borrada\r\n");
+      snprintf(bufferTx, sizeof(bufferTx), "Memoria de datos borrada.\r\n");
+      CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
+      SwitchMode(WAIT);
+    }
+    if(estado_actual == PID_PARAMETERS_RESET){
+      SetSetPoint(0);
+      PIDInit(Kp,Ki,Kd,Tss);
+      snprintf(bufferTx, sizeof(bufferTx), "Se reiniciaron las variables del PID.\r\n");
       CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
       SwitchMode(WAIT);
     }
@@ -323,7 +386,8 @@ int main(void)
 
       //limitador de error acumulado
       if (PID.Maths.integral > 1000){
-        AdjustPWM(0);
+        SetSetPoint(0);
+        SwitchMode(WAIT);
         snprintf(bufferTx, sizeof(bufferTx), "Error de tensión. Reiniciar sistema!\r");
         CDC_Transmit_FS((uint8_t*)bufferTx, strlen(bufferTx));
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);

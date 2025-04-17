@@ -79,6 +79,18 @@ void SetSetPoint(float set_point) {
 }
 
 /**
+ * @brief Modifica las constantes del PID
+ * 
+ * @param param Puntero a la constante a modificar (Kp, Ki o Kd)
+ * @param value Valor de la constante a modificar
+ */
+void SetPIDConst (float *param,float value){
+    if (value >= 0) *param = value;
+    else *param = 0.0f;
+}
+
+
+/**
  * @brief Ajusta el PWM del controlador
  * 
  * @param PWM_percent Valor del PWM en porcentaje
