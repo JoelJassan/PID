@@ -133,7 +133,6 @@ Release/
 
 
 # Archivos específicos de CubeIDE
-*.launch
 *.sdf
 *.d
 *.o
